@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="es" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supervisión Tótems | Auditoría V10</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-body: #121212;
+            --bg-card: #1e1e1e;
+            --bg-input: #2b2b2b;
+            --border-color: #333333;
+            --text-main: #e0e0e0;
+            --text-muted: #a0a0a0;
+            
+            /* PALETA TÁCTICA */
+            --color-original: #2A81CB; /* Azul */
+            --color-final: #2AAD27;    /* Verde */
+            --color-tech: #FFD326;     /* Amarillo Gold (Técnico) */
+            --color-warning: #ffc107;
+        }
+
+        body { 
+            background-color: var(--bg-body); 
+            color: var(--text-main);
+            font-family: 'Segoe UI', Roboto, Helvetica, sans-serif;
+            padding-bottom: 80px;
+        }
+
+        /* Estilos Base */
+        .card { background-color: var(--bg-card); border: 1px solid var(--border-color); }
+        .search-container {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .form-control, .input-group-text {
+            background-color: var(--bg-input) !important;
+            border-color: var(--border-color) !important;
+            color: #fff !important;
+            text-transform: uppercase; 
+        }
+        .form-control:focus {
+            box-shadow: none;
+            border-color: var(--color-original) !important;
+        }
+
+        /* Mapa */
+        #map { 
+            height: 500px; 
+            width: 100%; 
+            border-radius: 6px; 
+            border: 1px solid #555; 
+            z-index: 1;
+        }
+
+        /* PANEL AUDITORÍA (NUEVO) */
+        .audit-panel {
+            background: rgba(255, 211, 38, 0.05);
+            border: 1px dashed var(--color-tech);
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .btn-audit {
+            background-color: var(--color-tech);
+            color: #000;
+            font-weight: bold;
+            border: none;
+        }
+        .btn-audit:hover { background-color: #e6be22; }
+
+        /* Barras de Estado */
+        .status-bar {
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .status-match { background: rgba(42, 173, 39, 0.2); border: 1px solid var(--color-final); color: var(--color-final); }
+        .status-diff { background: rgba(255, 193, 7, 0.15); border: 1px solid var(--color-warning); color: var(--color-warning); }
+
+        /* Estilos de Tarjetas */
+        .card-header-custom {
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.9rem;
+            letter-spacing: 0.5px;
+            padding: 12px 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .border-orig { border-top: 4px solid var(--color-original); }
+        .header-orig { color: var(--color-original); background: rgba(42, 129, 203, 0.1); }
+        
+        .border-final { border-top: 4px solid var(--color-final); }
+        .header-final { color: var(--color-final); background: rgba(42, 173, 39, 0.1); }
+
+        .field-label { font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-top: 10px; margin-bottom: 2px; }
+        .field-value { font-size: 1.05rem; font-weight: 400; color: #fff; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 5px; }
+
+        /* Coordenadas Box */
+        .coords-box {
+            background: #181818; padding: 10px; border-radius: 6px; border: 1px solid #333;
+            display: flex; align-items: center; justify-content: space-between; margin-top: 5px;
+        }
+        .coords-text { font-family: 'Consolas', monospace; font-size: 0.9rem; }
+        .text-coord-orig { color: var(--color-original); }
+        .text-coord-final { color: var(--color-final); }
+
+        .btn-dark-custom { background-color: #2b2b2b; border: 1px solid #444; color: #ccc; font-size: 0.85rem; }
+        .btn-dark-custom:hover { background-color: #444; color: #fff; }
+
+        /* Badge Distancia Mapa */
+        .dist-badge {
+            background: #fff; border: 2px solid #000; color: #000; font-weight: bold;
+            padding: 4px 8px; border-radius: 12px; font-size: 11px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        /* Badge especial para el técnico */
+        .dist-badge-tech {
+            background: #000; border: 2px solid var(--color-tech); color: var(--color-tech);
+        }
+    </style>
+</head>
+<body>
+
+<div class="container mt-4" style="max-width: 1000px;">
+    
+    <div class="d-flex align-items-center justify-content-center mb-4 text-muted">
+        <h5 class="m-0 text-uppercase">
+            <i class="fa-solid fa-satellite-dish me-2"></i> Monitor de Tótems
+        </h5>
+    </div>
+
+    <div class="search-container mb-4">
+        <label class="form-label fw-bold" style="color: var(--text-muted);">Buscar ID de Sitio</label>
+        <div class="input-group">
+            <span class="input-group-text"><i class="fa-solid fa-search"></i></span>
+            <input type="text" id="searchInput" class="form-control form-control-lg" placeholder="Ej. 6534..." autocomplete="off">
+        </div>
+    </div>
+    
+    <div id="loading" class="text-center my-4" style="display:none;">
+        <div class="spinner-border text-primary" role="status"></div>
+        <div class="text-muted small mt-2">Cargando datos...</div>
+    </div>
+    <div id="errorMsg" class="alert alert-danger d-none text-center shadow-sm border-0 bg-opacity-10 bg-danger text-danger"></div>
+
+    <div id="resultados" class="d-none">
+        
+        <div id="statusAlert" class="status-bar d-none"></div>
+
+        <div class="audit-panel">
+            <label class="form-label fw-bold text-warning"><i class="fa-solid fa-user-astronaut me-1"></i> VERIFICACIÓN DE TÉCNICO EN CAMPO</label>
+            <div class="input-group">
+                <input type="text" id="techInput" class="form-control" placeholder="Pegar coordenadas del técnico (Ej. 19.432, -99.133)">
+                <button class="btn btn-audit" type="button" onclick="verificarTecnico()">
+                    <i class="fa-solid fa-crosshairs me-1"></i> COMPARAR
+                </button>
+            </div>
+            <div id="techFeedback" class="mt-2 text-warning small" style="display:none;"></div>
+        </div>
+
+        <div class="card p-1 mb-4 border-0 bg-white">
+            <div id="map"></div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-md-6">
+                <div class="card h-100 border-orig">
+                    <div class="card-header-custom header-orig">
+                        <i class="fa-solid fa-location-dot me-2"></i> Asignación Original
+                    </div>
+                    <div class="card-body">
+                        <div class="field-label">Calle</div>
+                        <div class="field-value" id="origCalle"></div>
+                        <div class="field-label">Colonia / Alcaldía</div>
+                        <div class="field-value"><span id="origColonia"></span>, <span id="origAlcaldia"></span></div>
+                        
+                        <div class="mt-4">
+                            <label class="field-label mb-1">Coordenadas</label>
+                            <div class="coords-box">
+                                <span id="txtOrigCoords" class="coords-text text-coord-orig text-truncate me-2">...</span>
+                                <div class="btn-group">
+                                    <button class="btn btn-dark-custom" onclick="copiarCoords('txtOrigCoords', this)"><i class="fa-regular fa-copy"></i></button>
+                                    <a href="#" id="linkOrigMap" target="_blank" class="btn btn-dark-custom"><i class="fa-solid fa-map"></i></a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card h-100 border-final">
+                    <div class="card-header-custom header-final d-flex justify-content-between">
+                        <span><i class="fa-solid fa-circle-check me-2"></i> Ubicación Real</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="field-label">Calle (Detectada)</div>
+                        <div class="field-value" id="finalCalle"></div>
+                        <div class="field-label">Colonia / Alcaldía</div>
+                        <div class="field-value"><span id="finalColonia"></span>, <span id="finalAlcaldia"></span></div>
+
+                        <div class="mt-4">
+                            <label class="field-label mb-1">Coordenadas</label>
+                            <div class="coords-box">
+                                <span id="txtFinalCoords" class="coords-text text-coord-final text-truncate me-2">...</span>
+                                <div class="btn-group">
+                                    <button class="btn btn-dark-custom" onclick="copiarCoords('txtFinalCoords', this)"><i class="fa-regular fa-copy"></i></button>
+                                    <a href="#" id="linkFinalMap" target="_blank" class="btn btn-dark-custom"><i class="fa-solid fa-map"></i></a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    let totemsData = [];
+    let map = null;
+    let markersLayer = new L.LayerGroup();
+    let techLayer = new L.LayerGroup(); // Capa exclusiva para el técnico
+    let searchTimeout = null; 
+    
+    // Variables globales para guardar las posiciones actuales
+    let currentOrigLatLng = null;
+    let currentFinalLatLng = null;
+
+    const urlJSON = 'https://raw.githubusercontent.com/lazerboy404/sup-rastreador/main/totems.json';
+
+    // ICONOS
+    const blueIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
+    const greenIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
+    const goldIcon = new L.Icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-gold.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
+
+    window.onload = async function() {
+        document.getElementById('loading').style.display = 'block';
+        try {
+            const response = await fetch(urlJSON);
+            if (!response.ok) throw new Error("Error");
+            totemsData = await response.json();
+            initMap();
+        } catch (error) { mostrarError("Error de base de datos."); } 
+        finally { document.getElementById('loading').style.display = 'none'; }
+
+        document.getElementById('searchInput').addEventListener('input', function() {
+            const val = this.value;
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => { buscarTotem(val); }, 400); 
+        });
+    };
+
+    function initMap() {
+        map = L.map('map').setView([19.4326, -99.1332], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+        markersLayer.addTo(map);
+        techLayer.addTo(map);
+    }
+
+    function soloNumeros(t) { return String(t).replace(/\D/g, ''); }
+    function limpiarTexto(t) { return String(t).toLowerCase().replace(/[^a-z0-9]/g, ''); }
+    function copiarCoords(id, btn) {
+        navigator.clipboard.writeText(document.getElementById(id).innerText);
+        const html = btn.innerHTML; btn.innerHTML = '<i class="fa-solid fa-check text-success"></i>';
+        setTimeout(() => btn.innerHTML = html, 1500);
+    }
+
+    function buscarTotem(inputRaw) {
+        const inputNumeros = soloNumeros(inputRaw);
+        const inputLimpio = limpiarTexto(inputRaw);
+        
+        const resultadosDiv = document.getElementById('resultados');
+        const errorDiv = document.getElementById('errorMsg');
+        
+        // Reset completo al buscar de nuevo
+        markersLayer.clearLayers();
+        techLayer.clearLayers(); // Borra al técnico anterior
+        document.getElementById('techInput').value = ''; 
+        document.getElementById('techFeedback').style.display = 'none';
+        
+        currentOrigLatLng = null;
+        currentFinalLatLng = null;
+
+        if (!inputLimpio) { resultadosDiv.classList.add('d-none'); errorDiv.classList.add('d-none'); return; }
+
+        const totem = totemsData.find(t => {
+            const idBD = String(t.ID);
+            if (inputNumeros.length >= 2 && soloNumeros(idBD) === inputNumeros) return true;
+            return limpiarTexto(idBD) === inputLimpio;
+        });
+
+        if (totem) {
+            errorDiv.classList.add('d-none');
+            mostrarResultados(totem);
+        } else {
+            if(inputRaw.length > 3) { mostrarError("ID no localizado."); resultadosDiv.classList.add('d-none'); }
+        }
+    }
+
+    function mostrarResultados(t) {
+        document.getElementById('origCalle').innerText = t["CALLE ORIGINAL"] || "-";
+        document.getElementById('origColonia').innerText = t["COLONIA ORIGINAL"] || "-";
+        document.getElementById('origAlcaldia').innerText = t["ALCALDIA ORIGINAL"] || "-";
+
+        const latO = parseFloat(t["LATITUD ORIGINAL"]);
+        const lonO = parseFloat(t["LONGITUD ORIGINAL"]);
+        document.getElementById('txtOrigCoords').innerText = `${latO}, ${lonO}`;
+        document.getElementById('linkOrigMap').href = `https://www.google.com/maps/search/?api=1&query=${latO},${lonO}`;
+
+        document.getElementById('finalCalle').innerText = "ANALIZANDO...";
+        document.getElementById('finalColonia').innerText = "-";
+        document.getElementById('finalAlcaldia').innerText = "-";
+
+        const latF = parseFloat(t["LATITUD FINAL"]);
+        const lonF = parseFloat(t["LONGITUD FINAL"]);
+        document.getElementById('txtFinalCoords').innerText = `${latF}, ${lonF}`;
+        document.getElementById('linkFinalMap').href = `https://www.google.com/maps/search/?api=1&query=${latF},${lonF}`;
+
+        geocodificarInversa(latF, lonF);
+
+        // MAPA
+        let bounds = [];
+
+        if (!isNaN(latO) && !isNaN(lonO)) {
+            currentOrigLatLng = L.latLng(latO, lonO);
+            L.marker(currentOrigLatLng, {icon: blueIcon}).bindPopup("<b>Asignación Original</b>").addTo(markersLayer);
+            bounds.push(currentOrigLatLng);
+        }
+
+        if (!isNaN(latF) && !isNaN(lonF)) {
+            currentFinalLatLng = L.latLng(latF, lonF);
+            L.marker(currentFinalLatLng, {icon: greenIcon, zIndexOffset: 500}).bindPopup("<b>Ubicación Real</b>").addTo(markersLayer);
+            bounds.push(currentFinalLatLng);
+        }
+
+        // Estado y Líneas Totem
+        const alertBox = document.getElementById('statusAlert');
+        alertBox.className = 'status-bar d-none'; 
+
+        if (currentOrigLatLng && currentFinalLatLng) {
+            const dist = map.distance(currentOrigLatLng, currentFinalLatLng);
+            
+            if (dist < 5) {
+                alertBox.innerHTML = '<i class="fa-solid fa-check-circle"></i> ✅ CONFIRMADO: SIN CAMBIOS';
+                alertBox.classList.remove('d-none');
+                alertBox.classList.add('status-match');
+            } else {
+                const txtDist = dist < 1000 ? Math.round(dist) + " m" : (dist / 1000).toFixed(2) + " km";
+                alertBox.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ⚠️ SE MOVIÓ ${txtDist}`;
+                alertBox.classList.remove('d-none');
+                alertBox.classList.add('status-diff');
+
+                const line = L.polyline([currentOrigLatLng, currentFinalLatLng], { color: '#000', weight: 3, opacity: 0.5, dashArray: '5, 8' }).addTo(markersLayer);
+                line.bindTooltip(txtDist, { permanent: true, direction: 'center', className: 'dist-badge' }).openTooltip();
+            }
+        }
+
+        document.getElementById('resultados').classList.remove('d-none');
+        setTimeout(() => { map.invalidateSize(); if (bounds.length > 0) map.fitBounds(bounds, { padding: [80, 80], maxZoom: 18 }); }, 100);
+    }
+
+    // --- NUEVA FUNCIÓN: VERIFICAR TÉCNICO ---
+    function verificarTecnico() {
+        const rawInput = document.getElementById('techInput').value;
+        const feedback = document.getElementById('techFeedback');
+        techLayer.clearLayers(); // Limpiar intentos anteriores
+
+        // Regex para sacar todos los decimales (positivos o negativos) del string pegado
+        const coordsMatch = rawInput.match(/-?\d+(\.\d+)?/g);
+
+        if (!coordsMatch || coordsMatch.length < 2) {
+            feedback.innerHTML = "❌ Formato inválido. Pega algo como: 19.432, -99.123";
+            feedback.style.display = 'block';
+            return;
+        }
+
+        const latT = parseFloat(coordsMatch[0]);
+        const lonT = parseFloat(coordsMatch[1]);
+        const techLatLng = L.latLng(latT, lonT);
+
+        // Marcador Técnico (Dorado)
+        L.marker(techLatLng, {icon: goldIcon, zIndexOffset: 1000})
+            .bindPopup("<b>👷 Técnico en Campo</b>").addTo(techLayer)
+            .openPopup();
+
+        let infoText = "<b>RESULTADO AUDITORÍA:</b><br>";
+        let bounds = [techLatLng];
+
+        // Comparar con Original (Azul)
+        if (currentOrigLatLng) {
+            const distOrig = map.distance(techLatLng, currentOrigLatLng);
+            const txtOrig = Math.round(distOrig) + " m";
+            
+            // Línea a Original
+            L.polyline([techLatLng, currentOrigLatLng], { color: '#2A81CB', weight: 2, dashArray: '4, 4' }).addTo(techLayer);
+            
+            infoText += `🔹 A ${txtOrig} del Punto ORIGINAL.<br>`;
+            bounds.push(currentOrigLatLng);
+        }
+
+        // Comparar con Final (Verde)
+        if (currentFinalLatLng) {
+            const distFinal = map.distance(techLatLng, currentFinalLatLng);
+            const txtFinal = Math.round(distFinal) + " m";
+
+            // Línea a Final
+            L.polyline([techLatLng, currentFinalLatLng], { color: '#2AAD27', weight: 2, dashArray: '4, 4' }).addTo(techLayer)
+                .bindTooltip(txtFinal, { permanent: true, direction: 'center', className: 'dist-badge dist-badge-tech' });
+
+            infoText += `🟢 A ${txtFinal} del Punto FINAL (Instalado).`;
+            bounds.push(currentFinalLatLng);
+        }
+
+        feedback.innerHTML = infoText;
+        feedback.style.display = 'block';
+
+        // Zoom para ver todo
+        map.fitBounds(bounds, { padding: [100, 100] });
+    }
+
+    async function geocodificarInversa(lat, lon) {
+        if (!lat || !lon) return;
+        try {
+            const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`, { headers: { 'User-Agent': 'TotemAudit/10.0' } });
+            const data = await resp.json();
+            const adr = data.address || {};
+            document.getElementById('finalCalle').innerText = (adr.road || "SIN CALLE").toUpperCase();
+            document.getElementById('finalColonia').innerText = (adr.neighbourhood || adr.suburb || adr.residential || "-").toUpperCase();
+            document.getElementById('finalAlcaldia').innerText = (adr.city_district || adr.city || adr.town || "-").toUpperCase();
+        } catch (e) { document.getElementById('finalCalle').innerText = "ERROR API"; }
+    }
+
+    function mostrarError(msg) {
+        const err = document.getElementById('errorMsg'); err.innerText = msg; err.classList.remove('d-none');
+    }
+</script>
+
+</body>
+</html>
